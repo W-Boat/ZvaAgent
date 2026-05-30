@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Zva</string>
+    <string name="tab_chat">Chat</string>
+    <string name="tab_history">History</string>
+    <string name="tab_me">Me</string>
+    <string name="dia_status_thinking">Dia is thinking.</string>
+    <string name="dia_status_working">Dia is working.</string>
+    <string name="dia_status_replying">Dia is replying.</string>
+    <string name="zva_status_calling">Zva is calling Dia.</string>
+    <string name="zva_status_here">Zva is here.</string>
+    <string name="input_hint">Message Zva…</string>
+    <string name="settings_title">Settings</string>
+    <string name="api_endpoint">API Endpoint</string>
+    <string name="api_key">API Key</string>
+    <string name="model_name">Model</string>
+    <string name="persona_name">Persona Name</string>
+    <string name="save">Save</string>
+    <string name="welcome_title">Welcome to Zva</string>
+    <string name="welcome_subtitle">Your companion AI. Dia does the work, Zva stays with you.</string>
+    <string name="setup_hint">Set up your API to begin</string>
+</resources>
