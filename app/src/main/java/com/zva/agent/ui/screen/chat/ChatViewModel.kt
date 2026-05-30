@@ -44,6 +44,7 @@ enum class ProcessStepType {
 
 data class ChatUiState(
     val messages: List<ChatMessage> = emptyList(),
+    val streamingMessage: ChatMessage? = null,  // current streaming message
     val status: AgentStatus = AgentStatus.IDLE,
     val isLoading: Boolean = false,
     val sessionId: String = UUID.randomUUID().toString(),
@@ -156,36 +157,45 @@ class ChatViewModel @Inject constructor(
                     }
                 },
                 onMessage = { chatMsg ->
-                    val stepType = when (chatMsg.speaker) {
-                        is Speaker.Tool -> ProcessStepType.TOOL_RESULT
-                        Speaker.Dia -> ProcessStepType.REPLY
-                        Speaker.Zva -> ProcessStepType.REPLY
-                        else -> ProcessStepType.REPLY
-                    }
-                    _uiState.update { st ->
-                        st.copy(
-                            processSteps = st.processSteps + ProcessStep(
-                                type = stepType,
-                                label = chatMsg.speaker.displayName,
-                                detail = chatMsg.content.take(200),
-                                isComplete = true,
-                            )
-                        )
-                    }
+                    if (chatMsg.isStreaming) {
+                        // Streaming in progress — update live, don't save to DB yet
+                        _uiState.update { it.copy(streamingMessage = chatMsg) }
+                    } else {
+                        // Final message — clear streaming, save to DB
+                        _uiState.update { it.copy(streamingMessage = null) }
 
-                    viewModelScope.launch {
-                        val entity = MessageEntity(
-                            sessionId = sessionId,
-                            role = when (chatMsg.speaker) {
-                                Speaker.Zva -> "assistant_zva"
-                                Speaker.Dia -> "assistant_dia"
-                                is Speaker.Tool -> "tool"
-                                Speaker.User -> "user"
-                            },
-                            content = chatMsg.content,
-                            toolName = (chatMsg.speaker as? Speaker.Tool)?.toolName,
-                        )
-                        messageDao.insert(entity)
+                        val stepType = when (chatMsg.speaker) {
+                            is Speaker.Tool -> ProcessStepType.TOOL_RESULT
+                            Speaker.Dia -> ProcessStepType.REPLY
+                            Speaker.Zva -> ProcessStepType.REPLY
+                            else -> ProcessStepType.REPLY
+                        }
+                        _uiState.update { st ->
+                            st.copy(
+                                processSteps = st.processSteps + ProcessStep(
+                                    type = stepType,
+                                    label = chatMsg.speaker.displayName,
+                                    detail = chatMsg.content.take(200),
+                                    isComplete = true,
+                                )
+                            )
+                        }
+
+                        viewModelScope.launch {
+                            val entity = MessageEntity(
+                                sessionId = sessionId,
+                                role = when (chatMsg.speaker) {
+                                    Speaker.Zva -> "assistant_zva"
+                                    Speaker.Dia -> "assistant_dia"
+                                    is Speaker.Tool -> "tool"
+                                    Speaker.User -> "user"
+                                },
+                                content = chatMsg.content,
+                                toolName = (chatMsg.speaker as? Speaker.Tool)?.toolName,
+                            )
+                            messageDao.insert(entity)
+                        }
+                    }
                     }
                 },
             )
@@ -202,7 +212,7 @@ class ChatViewModel @Inject constructor(
         viewModelScope.launch {
             messageDao.deleteSession(_uiState.value.sessionId)
             val newId = UUID.randomUUID().toString()
-            _uiState.update { it.copy(messages = emptyList(), sessionId = newId, processSteps = emptyList()) }
+            _uiState.update { it.copy(messages = emptyList(), sessionId = newId, processSteps = emptyList(), streamingMessage = null) }
         }
     }
 }

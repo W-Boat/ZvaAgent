@@ -84,3 +84,36 @@ data class ToolCallFunction(
     val name: String,
     val arguments: String, // JSON string
 )
+
+// ── Streaming Response ───────────────────────────────────────────────────────
+
+data class ChatCompletionChunk(
+    val id: String?,
+    val choices: List<ChunkChoice>,
+)
+
+data class ChunkChoice(
+    val index: Int,
+    val delta: ChunkDelta,
+    @SerializedName("finish_reason")
+    val finishReason: String?,
+)
+
+data class ChunkDelta(
+    val role: String? = null,
+    val content: String? = null,
+    @SerializedName("tool_calls")
+    val toolCalls: List<ChunkToolCall>? = null,
+)
+
+data class ChunkToolCall(
+    val index: Int,
+    val id: String? = null,
+    val type: String? = null,
+    val function: ChunkToolCallFunction? = null,
+)
+
+data class ChunkToolCallFunction(
+    val name: String? = null,
+    val arguments: String? = null,
+)

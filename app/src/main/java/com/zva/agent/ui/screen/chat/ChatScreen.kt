@@ -112,7 +112,15 @@ fun ChatScreen(
                 MessageBubble(message = message)
             }
 
-            if (uiState.isLoading) {
+            // Streaming message (live, not yet saved)
+            val streaming = uiState.streamingMessage
+            if (streaming != null) {
+                item(key = "streaming") {
+                    MessageBubble(message = streaming)
+                }
+            }
+
+            if (uiState.isLoading && streaming == null) {
                 item {
                     Row(modifier = Modifier.padding(start = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                         CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = ZvaPrimary)
