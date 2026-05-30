@@ -196,7 +196,6 @@ class ChatViewModel @Inject constructor(
                             messageDao.insert(entity)
                         }
                     }
-                    }
                 },
             )
 
