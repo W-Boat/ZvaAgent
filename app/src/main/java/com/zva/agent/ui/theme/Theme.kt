@@ -7,43 +7,74 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 
-// ── Colors ───────────────────────────────────────────────────────────────────
+// ── Warm Sci-Fi Anime Palette ────────────────────────────────────────────────
 
-val ZvaPrimary = Color(0xFF6750A4)
+// Zva: soft purple → warm violet
+val ZvaPrimary = Color(0xFF9C7CFF)
 val ZvaOnPrimary = Color(0xFFFFFFFF)
-val ZvaPrimaryContainer = Color(0xFFEADDFF)
-val ZvaOnPrimaryContainer = Color(0xFF21005D)
+val ZvaPrimaryContainer = Color(0xFFE8DEFF)
+val ZvaOnPrimaryContainer = Color(0xFF2D004F)
 
-val DiaPrimary = Color(0xFF386A1F)
+// Dia: warm green → mint
+val DiaPrimary = Color(0xFF5ECA8A)
 val DiaOnPrimary = Color(0xFFFFFFFF)
-val DiaPrimaryContainer = Color(0xFFB8F397)
-val DiaOnPrimaryContainer = Color(0xFF042100)
+val DiaPrimaryContainer = Color(0xFFD4FFE2)
+val DiaOnPrimaryContainer = Color(0xFF002110)
 
-val SurfaceDark = Color(0xFF1C1B1F)
-val SurfaceLight = Color(0xFFFFFBFE)
+// Accent: warm pink
+val AccentPink = Color(0xFFFF6D9F)
+val AccentPinkContainer = Color(0xFFFFD9E6)
 
-// ── Theme ────────────────────────────────────────────────────────────────────
+// Warm surfaces
+val SurfaceWarmDark = Color(0xFF1A1625)
+val SurfaceWarmLight = Color(0xFFFFFBFE)
+
+// ── Dark Theme ───────────────────────────────────────────────────────────────
 
 private val DarkColorScheme = darkColorScheme(
     primary = ZvaPrimary,
     onPrimary = ZvaOnPrimary,
-    primaryContainer = ZvaPrimaryContainer,
-    onPrimaryContainer = ZvaOnPrimaryContainer,
-    surface = SurfaceDark,
+    primaryContainer = Color(0xFF3D2066),
+    onPrimaryContainer = ZvaPrimaryContainer,
+    secondary = DiaPrimary,
+    onSecondary = DiaOnPrimary,
+    secondaryContainer = Color(0xFF1A3A28),
+    onSecondaryContainer = DiaPrimaryContainer,
+    tertiary = AccentPink,
+    surface = SurfaceWarmDark,
+    surfaceVariant = Color(0xFF2A2438),
+    onSurfaceVariant = Color(0xFFCAC4D0),
+    background = Color(0xFF12101A),
+    onBackground = Color(0xFFE6E0E9),
+    outline = Color(0xFF938F99),
 )
 
+// ── Light Theme ──────────────────────────────────────────────────────────────
+
 private val LightColorScheme = lightColorScheme(
-    primary = ZvaPrimary,
+    primary = Color(0xFF6750A4),
     onPrimary = ZvaOnPrimary,
     primaryContainer = ZvaPrimaryContainer,
     onPrimaryContainer = ZvaOnPrimaryContainer,
-    surface = SurfaceLight,
+    secondary = Color(0xFF386A1F),
+    onSecondary = DiaOnPrimary,
+    secondaryContainer = DiaPrimaryContainer,
+    onSecondaryContainer = DiaOnPrimaryContainer,
+    tertiary = Color(0xFFBA1A1A),
+    surface = SurfaceWarmLight,
+    surfaceVariant = Color(0xFFF3EFF4),
+    onSurfaceVariant = Color(0xFF49454F),
+    background = Color(0xFFFFFBFE),
+    onBackground = Color(0xFF1C1B1F),
+    outline = Color(0xFF79747E),
 )
+
+// ── Theme Composable ─────────────────────────────────────────────────────────
 
 @Composable
 fun ZvaTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    dynamicColor: Boolean = true,
+    dynamicColor: Boolean = false, // default off for consistent anime aesthetic
     content: @Composable () -> Unit,
 ) {
     val colorScheme = when {

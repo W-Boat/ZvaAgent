@@ -6,6 +6,11 @@ import com.zva.agent.data.model.ParameterProperty
 import com.zva.agent.data.model.ToolDefinition
 import com.google.gson.Gson
 import com.google.gson.JsonObject
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.net.HttpURLConnection
+import java.net.URL
+import java.net.URLEncoder
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -16,43 +21,37 @@ interface Tool {
     suspend fun execute(args: JsonObject): String
 
     fun toDefinition() = ToolDefinition(
-        function = FunctionDefinition(
-            name = name,
-            description = description,
-            parameters = parameters,
-        )
+        function = FunctionDefinition(name = name, description = description, parameters = parameters)
     )
 }
 
-// ── Built-in Tools ──────────────────────────────────────────────────────────
+// ── Get Current Time ─────────────────────────────────────────────────────────
 
 class GetTimeTool : Tool {
     override val name = "get_current_time"
-    override val description = "Get the current date and time"
+    override val description = "Get the current date and time with timezone info"
     override val parameters = FunctionParameters(
         properties = mapOf(
-            "format" to ParameterProperty(
-                type = "string",
-                description = "Date format pattern, default 'yyyy-MM-dd HH:mm:ss'"
-            )
+            "format" to ParameterProperty(type = "string", description = "Date format pattern, default 'yyyy-MM-dd HH:mm:ss z'")
         )
     )
 
     override suspend fun execute(args: JsonObject): String {
-        val format = if (args.has("format")) args.get("format").asString else "yyyy-MM-dd HH:mm:ss"
-        return SimpleDateFormat(format, Locale.getDefault()).format(Date())
+        val format = if (args.has("format")) args.get("format").asString else "yyyy-MM-dd HH:mm:ss z"
+        val now = Date()
+        val tz = TimeZone.getDefault()
+        return "Current time: ${SimpleDateFormat(format, Locale.getDefault()).apply { timeZone = tz }.format(now)} (timezone: ${tz.id})"
     }
 }
 
+// ── Calculator ───────────────────────────────────────────────────────────────
+
 class CalculatorTool : Tool {
     override val name = "calculate"
-    override val description = "Evaluate a mathematical expression. Supports +, -, *, /, ^, sqrt, sin, cos, tan, log, pi, e"
+    override val description = "Evaluate a mathematical expression. Supports +, -, *, /, parentheses"
     override val parameters = FunctionParameters(
         properties = mapOf(
-            "expression" to ParameterProperty(
-                type = "string",
-                description = "The math expression to evaluate, e.g. '2 + 3 * 4' or 'sqrt(16)'"
-            )
+            "expression" to ParameterProperty(type = "string", description = "The math expression to evaluate, e.g. '2 + 3 * 4'")
         ),
         required = listOf("expression")
     )
@@ -68,10 +67,7 @@ class CalculatorTool : Tool {
     }
 
     private fun evaluateSimple(expr: String): Double {
-        val clean = expr.replace(" ", "")
-            .replace("pi", Math.PI.toString())
-            .replace("e", Math.E.toString())
-        // Simple recursive descent for basic math
+        val clean = expr.replace(" ", "").replace("pi", Math.PI.toString()).replace("e", Math.E.toString())
         return parseExpression(clean, 0).first
     }
 
@@ -126,6 +122,8 @@ class CalculatorTool : Tool {
     }
 }
 
+// ── Memory Tools ─────────────────────────────────────────────────────────────
+
 class RememberTool : Tool {
     override val name = "remember"
     override val description = "Save an important piece of information to long-term memory"
@@ -138,7 +136,6 @@ class RememberTool : Tool {
         required = listOf("content")
     )
 
-    // Injected externally
     var onRemember: (suspend (String, String, Float) -> Unit)? = null
 
     override suspend fun execute(args: JsonObject): String {
@@ -169,9 +166,11 @@ class RecallMemoryTool : Tool {
     }
 }
 
+// ── Reminder ─────────────────────────────────────────────────────────────────
+
 class SetReminderTool : Tool {
     override val name = "set_reminder"
-    override val description = "Set a reminder for the user"
+    override val description = "Set a reminder for the user. The system will send a notification."
     override val parameters = FunctionParameters(
         properties = mapOf(
             "content" to ParameterProperty(type = "string", description = "What to remind about"),
@@ -180,16 +179,21 @@ class SetReminderTool : Tool {
         required = listOf("content", "time")
     )
 
+    var onSetReminder: (suspend (String, String) -> Unit)? = null
+
     override suspend fun execute(args: JsonObject): String {
         val content = args.get("content").asString
         val time = args.get("time").asString
-        return "Reminder set: '$content' at $time"
+        onSetReminder?.invoke(content, time)
+        return "Reminder set: '$content' at $time. Dia will notify you."
     }
 }
 
+// ── Real Web Search (DuckDuckGo HTML) ────────────────────────────────────────
+
 class WebSearchTool : Tool {
     override val name = "web_search"
-    override val description = "Search the web for information"
+    override val description = "Search the web for real-time information using DuckDuckGo"
     override val parameters = FunctionParameters(
         properties = mapOf(
             "query" to ParameterProperty(type = "string", description = "Search query"),
@@ -199,8 +203,174 @@ class WebSearchTool : Tool {
 
     override suspend fun execute(args: JsonObject): String {
         val query = args.get("query").asString
-        // Stub — in production, integrate Tavily or similar
-        return "Web search for '$query': (web search is not yet connected. This is a demo stub.)"
+        return withContext(Dispatchers.IO) {
+            try {
+                val encoded = URLEncoder.encode(query, "UTF-8")
+                val url = URL("https://html.duckduckgo.com/html/?q=$encoded")
+                val conn = url.openConnection() as HttpURLConnection
+                conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36")
+                conn.connectTimeout = 8000
+                conn.readTimeout = 8000
+
+                val html = conn.inputStream.bufferedReader().readText()
+                conn.disconnect()
+
+                val results = parseSearchResults(html)
+                if (results.isEmpty()) {
+                    "No results found for '$query'"
+                } else {
+                    buildString {
+                        appendLine("Search results for '$query':")
+                        results.take(5).forEachIndexed { i, r ->
+                            appendLine("${i + 1}. ${r.title}")
+                            appendLine("   ${r.snippet}")
+                            appendLine("   ${r.url}")
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                "Search error: ${e.message}"
+            }
+        }
+    }
+
+    private data class SearchResult(val title: String, val snippet: String, val url: String)
+
+    private fun parseSearchResults(html: String): List<SearchResult> {
+        val results = mutableListOf<SearchResult>()
+        // Parse DuckDuckGo HTML results
+        val resultPattern = Regex("""<a[^>]*class="result__a"[^>]*href="([^"]*)"[^>]*>(.*?)</a>""", RegexOption.DOT_MATCHES_ALL)
+        val snippetPattern = Regex("""<a[^>]*class="result__snippet"[^>]*>(.*?)</a>""", RegexOption.DOT_MATCHES_ALL)
+
+        val titleMatches = resultPattern.findAll(html).toList()
+        val snippetMatches = snippetPattern.findAll(html).toList()
+
+        for (i in titleMatches.indices) {
+            val titleRaw = titleMatches[i].groupValues[2].replace(Regex("<[^>]+>"), "").trim()
+            val urlRaw = titleMatches[i].groupValues[1]
+                .replace("https://duckduckgo.com/l/?uddg=", "")
+                .split("&")[0]
+                .let { java.net.URLDecoder.decode(it, "UTF-8") }
+            val snippetRaw = if (i < snippetMatches.size) {
+                snippetMatches[i].groupValues[1].replace(Regex("<[^>]+>"), "").trim()
+            } else ""
+
+            if (titleRaw.isNotBlank()) {
+                results.add(SearchResult(titleRaw, snippetRaw, urlRaw))
+            }
+        }
+        return results
+    }
+}
+
+// ── Fetch URL Content ────────────────────────────────────────────────────────
+
+class FetchUrlTool : Tool {
+    override val name = "fetch_url"
+    override val description = "Fetch and read the content of a web page URL"
+    override val parameters = FunctionParameters(
+        properties = mapOf(
+            "url" to ParameterProperty(type = "string", description = "The URL to fetch"),
+            "max_length" to ParameterProperty(type = "string", description = "Max characters to return (default 3000)"),
+        ),
+        required = listOf("url")
+    )
+
+    override suspend fun execute(args: JsonObject): String {
+        val urlStr = args.get("url").asString
+        val maxLength = if (args.has("max_length")) args.get("max_length").asString.toIntOrNull() ?: 3000 else 3000
+
+        return withContext(Dispatchers.IO) {
+            try {
+                val url = URL(urlStr)
+                val conn = url.openConnection() as HttpURLConnection
+                conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36")
+                conn.connectTimeout = 10000
+                conn.readTimeout = 10000
+                conn.instanceFollowRedirects = true
+
+                val contentType = conn.contentType ?: ""
+                val text = conn.inputStream.bufferedReader().readText()
+                conn.disconnect()
+
+                // Strip HTML tags for readability
+                val cleaned = if ("html" in contentType) {
+                    text.replace(Regex("<script[^>]*>[\\s\\S]*?</script>"), "")
+                        .replace(Regex("<style[^>]*>[\\s\\S]*?</style>"), "")
+                        .replace(Regex("<[^>]+>"), " ")
+                        .replace(Regex("\\s+"), " ")
+                        .trim()
+                } else {
+                    text
+                }
+
+                if (cleaned.length > maxLength) cleaned.take(maxLength) + "..." else cleaned
+            } catch (e: Exception) {
+                "Failed to fetch $urlStr: ${e.message}"
+            }
+        }
+    }
+}
+
+// ── Send Notification ────────────────────────────────────────────────────────
+
+class SendNotificationTool : Tool {
+    override val name = "send_notification"
+    override val description = "Send a system notification to the user's device"
+    override val parameters = FunctionParameters(
+        properties = mapOf(
+            "title" to ParameterProperty(type = "string", description = "Notification title"),
+            "message" to ParameterProperty(type = "string", description = "Notification body text"),
+        ),
+        required = listOf("title", "message")
+    )
+
+    var onNotify: (suspend (String, String) -> Unit)? = null
+
+    override suspend fun execute(args: JsonObject): String {
+        val title = args.get("title").asString
+        val message = args.get("message").asString
+        onNotify?.invoke(title, message)
+        return "Notification sent: '$title' — $message"
+    }
+}
+
+// ── List Skills ──────────────────────────────────────────────────────────────
+
+class ListSkillsTool : Tool {
+    override val name = "list_skills"
+    override val description = "List all available skills and their status"
+    override val parameters = FunctionParameters(properties = emptyMap())
+
+    var onListSkills: (suspend () -> String)? = null
+
+    override suspend fun execute(args: JsonObject): String {
+        return onListSkills?.invoke() ?: "No skills available"
+    }
+}
+
+// ── Create Sub-Agent ─────────────────────────────────────────────────────────
+
+class CreateSubAgentTool : Tool {
+    override val name = "create_sub_agent"
+    override val description = "Create a child sub-agent with a specific role for complex multi-step tasks. The sub-agent will be available for delegation."
+    override val parameters = FunctionParameters(
+        properties = mapOf(
+            "name" to ParameterProperty(type = "string", description = "Name for the sub-agent"),
+            "role" to ParameterProperty(type = "string", description = "Role description, e.g. 'researcher', 'coder', 'writer'"),
+            "system_prompt" to ParameterProperty(type = "string", description = "System prompt defining the sub-agent's behavior and expertise"),
+        ),
+        required = listOf("name", "role", "system_prompt")
+    )
+
+    var onCreate: (suspend (String, String, String) -> Unit)? = null
+
+    override suspend fun execute(args: JsonObject): String {
+        val name = args.get("name").asString
+        val role = args.get("role").asString
+        val prompt = args.get("system_prompt").asString
+        onCreate?.invoke(name, role, prompt)
+        return "Sub-agent '$name' ($role) created. It can now be delegated tasks."
     }
 }
 
@@ -216,6 +386,10 @@ class ToolRegistry {
         register(RecallMemoryTool())
         register(SetReminderTool())
         register(WebSearchTool())
+        register(FetchUrlTool())
+        register(SendNotificationTool())
+        register(ListSkillsTool())
+        register(CreateSubAgentTool())
     }
 
     fun register(tool: Tool) {

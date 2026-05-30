@@ -12,20 +12,43 @@ import com.zva.agent.domain.agent.AgentStatus
 import com.zva.agent.domain.agent.ChatMessage
 import com.zva.agent.domain.agent.Speaker
 import com.zva.agent.domain.memory.MemoryManager
+import com.zva.agent.domain.task.NotificationHelper
 import com.zva.agent.domain.tool.RecallMemoryTool
 import com.zva.agent.domain.tool.RememberTool
+import com.zva.agent.domain.tool.SendNotificationTool
+import com.zva.agent.domain.tool.SetReminderTool
+import com.zva.agent.domain.tool.ListSkillsTool
+import com.zva.agent.domain.tool.CreateSubAgentTool
 import com.zva.agent.domain.tool.ToolRegistry
+import com.zva.agent.data.db.SubAgentDao
+import com.zva.agent.data.db.SubAgentEntity
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.util.UUID
 import javax.inject.Inject
+
+data class ProcessStep(
+    val id: Long = System.nanoTime(),
+    val type: ProcessStepType,
+    val label: String,
+    val detail: String = "",
+    val timestamp: Long = System.currentTimeMillis(),
+    val isComplete: Boolean = false,
+)
+
+enum class ProcessStepType {
+    STATUS_CHANGE, TOOL_CALL, TOOL_RESULT, THINKING, REPLY
+}
 
 data class ChatUiState(
     val messages: List<ChatMessage> = emptyList(),
     val status: AgentStatus = AgentStatus.IDLE,
     val isLoading: Boolean = false,
     val sessionId: String = UUID.randomUUID().toString(),
+    val processSteps: List<ProcessStep> = emptyList(),
+    val isProcessPanelExpanded: Boolean = false,
 )
 
 @HiltViewModel
@@ -35,30 +58,61 @@ class ChatViewModel @Inject constructor(
     private val sessionDao: SessionDao,
     private val memoryManager: MemoryManager,
     private val toolRegistry: ToolRegistry,
+    private val notificationHelper: NotificationHelper,
+    private val subAgentDao: SubAgentDao,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ChatUiState())
     val uiState: StateFlow<ChatUiState> = _uiState.asStateFlow()
 
+    private var messageCollectJob: Job? = null
+
     init {
-        // Wire up memory tools
-        val rememberTool = toolRegistry.get("remember") as? RememberTool
-        rememberTool?.onRemember = { content, category, importance ->
-            memoryManager.remember(content, category, importance)
-        }
+        wireUpTools()
+        loadSession(_uiState.value.sessionId)
+    }
 
-        val recallTool = toolRegistry.get("recall_memory") as? RecallMemoryTool
-        recallTool?.onRecall = { query ->
-            memoryManager.recall(query)
-        }
-
-        // Load existing session or create new
-        viewModelScope.launch {
-            val sessionId = _uiState.value.sessionId
+    fun loadSession(sessionId: String) {
+        _uiState.update { it.copy(sessionId = sessionId, messages = emptyList(), processSteps = emptyList()) }
+        messageCollectJob?.cancel()
+        messageCollectJob = viewModelScope.launch {
             messageDao.getMessages(sessionId).collect { entities ->
                 val messages = entities.map { it.toChatMessage() }
                 _uiState.update { it.copy(messages = messages) }
             }
+        }
+    }
+
+    private fun wireUpTools() {
+        val rememberTool = toolRegistry.get("remember") as? RememberTool
+        rememberTool?.onRemember = { content, category, importance ->
+            memoryManager.remember(content, category, importance)
+        }
+        val recallTool = toolRegistry.get("recall_memory") as? RecallMemoryTool
+        recallTool?.onRecall = { query ->
+            memoryManager.recall(query)
+        }
+        val notifyTool = toolRegistry.get("send_notification") as? SendNotificationTool
+        notifyTool?.onNotify = { title, message ->
+            notificationHelper.send(title, message)
+        }
+        val reminderTool = toolRegistry.get("set_reminder") as? SetReminderTool
+        reminderTool?.onSetReminder = { content, time ->
+            notificationHelper.send("Reminder", "$content ($time)")
+        }
+        val listSkillsTool = toolRegistry.get("list_skills") as? ListSkillsTool
+        listSkillsTool?.onListSkills = {
+            val tools = toolRegistry.getAll()
+            buildString {
+                appendLine("Available tools (${tools.size}):")
+                tools.forEach { t ->
+                    appendLine("- ${t.name}: ${t.description}")
+                }
+            }
+        }
+        val createSubAgentTool = toolRegistry.get("create_sub_agent") as? CreateSubAgentTool
+        createSubAgentTool?.onCreate = { name, role, prompt ->
+            subAgentDao.insert(SubAgentEntity(name = name, role = role, systemPrompt = prompt))
         }
     }
 
@@ -68,25 +122,13 @@ class ChatViewModel @Inject constructor(
         val sessionId = _uiState.value.sessionId
 
         viewModelScope.launch {
-            // Save user message
-            val userEntity = MessageEntity(
-                sessionId = sessionId,
-                role = "user",
-                content = text,
-            )
+            val userEntity = MessageEntity(sessionId = sessionId, role = "user", content = text)
             messageDao.insert(userEntity)
 
-            // Ensure session exists
-            sessionDao.upsert(
-                SessionEntity(
-                    sessionId = sessionId,
-                    title = text.take(50),
-                )
-            )
+            sessionDao.upsert(SessionEntity(sessionId = sessionId, title = text.take(50)))
 
-            _uiState.update { it.copy(isLoading = true) }
+            _uiState.update { it.copy(isLoading = true, processSteps = emptyList(), isProcessPanelExpanded = true) }
 
-            // Build conversation history for API
             val history = _uiState.value.messages.map { msg ->
                 ApiMessage(
                     role = when (msg.speaker) {
@@ -98,15 +140,39 @@ class ChatViewModel @Inject constructor(
                 )
             }
 
-            // Process through agent
             agentEngine.processMessage(
                 userMessage = text,
                 conversationHistory = history,
                 onStatusChange = { status ->
-                    _uiState.update { it.copy(status = status) }
+                    _uiState.update { st ->
+                        st.copy(
+                            status = status,
+                            processSteps = st.processSteps + ProcessStep(
+                                type = ProcessStepType.STATUS_CHANGE,
+                                label = status.label,
+                                detail = status.symbol,
+                            )
+                        )
+                    }
                 },
                 onMessage = { chatMsg ->
-                    // Save to DB
+                    val stepType = when (chatMsg.speaker) {
+                        is Speaker.Tool -> ProcessStepType.TOOL_RESULT
+                        Speaker.Dia -> ProcessStepType.REPLY
+                        Speaker.Zva -> ProcessStepType.REPLY
+                        else -> ProcessStepType.REPLY
+                    }
+                    _uiState.update { st ->
+                        st.copy(
+                            processSteps = st.processSteps + ProcessStep(
+                                type = stepType,
+                                label = chatMsg.speaker.displayName,
+                                detail = chatMsg.content.take(200),
+                                isComplete = true,
+                            )
+                        )
+                    }
+
                     viewModelScope.launch {
                         val entity = MessageEntity(
                             sessionId = sessionId,
@@ -128,15 +194,15 @@ class ChatViewModel @Inject constructor(
         }
     }
 
+    fun toggleProcessPanel() {
+        _uiState.update { it.copy(isProcessPanelExpanded = !it.isProcessPanelExpanded) }
+    }
+
     fun clearChat() {
         viewModelScope.launch {
             messageDao.deleteSession(_uiState.value.sessionId)
-            _uiState.update {
-                it.copy(
-                    messages = emptyList(),
-                    sessionId = UUID.randomUUID().toString(),
-                )
-            }
+            val newId = UUID.randomUUID().toString()
+            _uiState.update { it.copy(messages = emptyList(), sessionId = newId, processSteps = emptyList()) }
         }
     }
 }
@@ -149,10 +215,5 @@ private fun MessageEntity.toChatMessage(): ChatMessage {
         "tool" -> Speaker.Tool(toolName ?: "tool")
         else -> Speaker.Zva
     }
-    return ChatMessage(
-        id = id,
-        speaker = speaker,
-        content = content,
-        timestamp = timestamp,
-    )
+    return ChatMessage(id = id, speaker = speaker, content = content, timestamp = timestamp)
 }

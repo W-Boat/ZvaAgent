@@ -7,6 +7,8 @@ import com.zva.agent.data.model.*
 import com.zva.agent.domain.memory.MemoryManager
 import com.zva.agent.domain.tool.ToolRegistry
 import kotlinx.coroutines.flow.first
+import java.text.SimpleDateFormat
+import java.util.*
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -78,6 +80,11 @@ You are Zva — a warm, emotionally intelligent AI companion. You separate emoti
 Current context:
 """.trimIndent()
 
+    private fun currentTimeString(): String {
+        val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss z (EEEE)", Locale.getDefault())
+        return sdf.format(Date())
+    }
+
     private val diaSystemPrompt = """
 You are Dia — a precise, efficient task executor. You only do the work.
 - You respond with clear, actionable output.
@@ -101,7 +108,7 @@ You are Dia — a precise, efficient task executor. You only do the work.
 
         // Build memory context
         val memoryContext = memoryManager.getMemoryContext()
-        val systemPrompt = zvaSystemPrompt + memoryContext
+        val systemPrompt = zvaSystemPrompt + "\nCurrent time: ${currentTimeString()}\n" + memoryContext
 
         // Build messages for API
         val messages = mutableListOf(

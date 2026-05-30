@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">扎哇</string>
+    <string name="tab_chat">对话</string>
+    <string name="tab_history">历史</string>
+    <string name="tab_me">我的</string>
+    <string name="dia_status_thinking">Dia 在思考。</string>
+    <string name="dia_status_working">Dia 在工作。</string>
+    <string name="dia_status_replying">Dia 在回复。</string>
+    <string name="zva_status_calling">Zva 正在呼叫 Dia。</string>
+    <string name="zva_status_here">Zva 在这里。</string>
+    <string name="input_hint">给 Zva 发消息…</string>
+    <string name="settings_title">设置</string>
+    <string name="api_endpoint">API 地址</string>
+    <string name="api_key">API 密钥</string>
+    <string name="model_name">模型</string>
+    <string name="persona_name">人格名称</string>
+    <string name="save">保存</string>
+    <string name="welcome_title">欢迎来到 Zva</string>
+    <string name="welcome_subtitle">你的 AI 伙伴。Dia 负责工作，Zva 陪伴你。</string>
+    <string name="setup_hint">配置你的 API 以开始使用</string>
+</resources>

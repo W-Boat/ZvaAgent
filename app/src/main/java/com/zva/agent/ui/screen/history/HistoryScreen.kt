@@ -21,50 +21,32 @@ import java.util.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HistoryScreen(viewModel: HistoryViewModel = hiltViewModel()) {
+fun HistoryScreen(
+    onSessionClick: (String) -> Unit = {},
+    viewModel: HistoryViewModel = hiltViewModel(),
+) {
     val sessions by viewModel.sessions.collectAsStateWithLifecycle(initialValue = emptyList())
 
     Column(modifier = Modifier.fillMaxSize()) {
         TopAppBar(
             title = { Text("History") },
-            colors = TopAppBarDefaults.topAppBarColors(
-                containerColor = MaterialTheme.colorScheme.surface,
-            ),
+            colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
         )
 
         if (sessions.isEmpty()) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center,
-            ) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(
-                        Icons.Default.ChatBubble,
-                        contentDescription = null,
-                        modifier = Modifier.size(64.dp),
-                        tint = MaterialTheme.colorScheme.outline,
-                    )
+                    Icon(Icons.Default.ChatBubble, contentDescription = null, modifier = Modifier.size(64.dp), tint = MaterialTheme.colorScheme.outline)
                     Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        "No conversations yet",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.outline,
-                    )
+                    Text("No conversations yet", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.outline)
                     Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        "Start chatting to see your history here",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.outline,
-                    )
+                    Text("Start chatting to see your history here", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
                 }
             }
         } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(vertical = 8.dp),
-            ) {
+            LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(vertical = 8.dp)) {
                 items(sessions, key = { it.sessionId }) { session ->
-                    SessionItem(session = session)
+                    SessionItem(session = session, onClick = { onSessionClick(session.sessionId) })
                 }
             }
         }
@@ -72,29 +54,18 @@ fun HistoryScreen(viewModel: HistoryViewModel = hiltViewModel()) {
 }
 
 @Composable
-private fun SessionItem(session: SessionEntity) {
+private fun SessionItem(session: SessionEntity, onClick: () -> Unit) {
     ListItem(
         headlineContent = {
-            Text(
-                text = session.title,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            Text(session.title, maxLines = 1, overflow = TextOverflow.Ellipsis)
         },
         supportingContent = {
-            Text(
-                text = formatRelativeTime(session.lastMessageAt),
-                style = MaterialTheme.typography.bodySmall,
-            )
+            Text(formatRelativeTime(session.lastMessageAt), style = MaterialTheme.typography.bodySmall)
         },
         leadingContent = {
-            Icon(
-                Icons.Default.ChatBubble,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-            )
+            Icon(Icons.Default.ChatBubble, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
         },
-        modifier = Modifier.clickable { /* TODO: navigate to session */ },
+        modifier = Modifier.clickable(onClick = onClick),
     )
 }
 

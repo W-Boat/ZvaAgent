@@ -66,7 +66,7 @@ fun MessageBubble(message: ChatMessage, modifier: Modifier = Modifier) {
         // Bubble
         Box(
             modifier = Modifier
-                .widthIn(max = 300.dp)
+                .widthIn(max = if (isUser) 300.dp else 340.dp)
                 .clip(
                     RoundedCornerShape(
                         topStart = 16.dp,
@@ -87,10 +87,9 @@ fun MessageBubble(message: ChatMessage, modifier: Modifier = Modifier) {
                     fontFamily = FontFamily.Monospace,
                 )
             } else {
-                Text(
-                    text = message.content,
+                MarkdownText(
+                    markdown = message.content,
                     color = textColor,
-                    style = MaterialTheme.typography.bodyLarge,
                 )
             }
         }

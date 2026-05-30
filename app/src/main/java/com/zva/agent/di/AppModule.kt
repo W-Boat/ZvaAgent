@@ -9,6 +9,8 @@ import com.zva.agent.data.db.MemoryDatabase
 import com.zva.agent.data.db.MemoryDao
 import com.zva.agent.data.db.MessageDao
 import com.zva.agent.data.db.SessionDao
+import com.zva.agent.data.db.PersonaDao
+import com.zva.agent.data.db.SubAgentDao
 import com.zva.agent.domain.tool.ToolRegistry
 import dagger.Module
 import dagger.Provides
@@ -73,6 +75,12 @@ object AppModule {
 
     @Provides
     fun provideSessionDao(db: MemoryDatabase): SessionDao = db.sessionDao()
+
+    @Provides
+    fun providePersonaDao(db: MemoryDatabase): PersonaDao = db.personaDao()
+
+    @Provides
+    fun provideSubAgentDao(db: MemoryDatabase): SubAgentDao = db.subAgentDao()
 
     @Provides
     @Singleton

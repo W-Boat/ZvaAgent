@@ -12,21 +12,30 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.zva.agent.ui.screen.chat.ChatScreen
 import com.zva.agent.ui.screen.history.HistoryScreen
 import com.zva.agent.ui.screen.me.MeScreen
 
 sealed class Screen(val route: String, val label: String, val icon: ImageVector) {
-    data object Chat : Screen("chat", "Chat", Icons.Default.Chat)
+    data object Chat : Screen("chat?sessionId={sessionId}", "Chat", Icons.Default.Chat)
     data object History : Screen("history", "History", Icons.Default.History)
     data object Me : Screen("me", "Me", Icons.Default.Person)
 }
 
-val bottomScreens = listOf(Screen.Chat, Screen.History, Screen.Me)
+val bottomScreens = listOf(
+    object : Screen("chat?sessionId={sessionId}", "Chat", Icons.Default.Chat) {},
+    object : Screen("history", "History", Icons.Default.History) {},
+    object : Screen("me", "Me", Icons.Default.Person) {},
+)
+
+fun chatRoute(sessionId: String? = null): String =
+    if (sessionId != null) "chat?sessionId=$sessionId" else "chat"
 
 @Composable
 fun AppNavigation() {
@@ -42,7 +51,10 @@ fun AppNavigation() {
                     NavigationBarItem(
                         icon = { Icon(screen.icon, contentDescription = screen.label) },
                         label = { Text(screen.label) },
-                        selected = currentDestination?.hierarchy?.any { it.route == screen.route } == true,
+                        selected = currentDestination?.hierarchy?.any {
+                            it.route?.startsWith("chat") == true && screen.label == "Chat" ||
+                            it.route == screen.route
+                        } == true,
                         onClick = {
                             navController.navigate(screen.route) {
                                 popUpTo(navController.graph.findStartDestination().id) {
@@ -59,12 +71,37 @@ fun AppNavigation() {
     ) { innerPadding ->
         NavHost(
             navController = navController,
-            startDestination = Screen.Chat.route,
+            startDestination = "chat",
             modifier = Modifier.padding(innerPadding),
         ) {
-            composable(Screen.Chat.route) { ChatScreen() }
-            composable(Screen.History.route) { HistoryScreen() }
-            composable(Screen.Me.route) { MeScreen() }
+            composable(
+                route = "chat?sessionId={sessionId}",
+                arguments = listOf(
+                    navArgument("sessionId") {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    }
+                )
+            ) { backStackEntry ->
+                val sessionId = backStackEntry.arguments?.getString("sessionId")
+                ChatScreen(initialSessionId = sessionId, onNavigateToHistory = {
+                    navController.navigate("history") {
+                        popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                })
+            }
+            composable("history") {
+                HistoryScreen(onSessionClick = { sessionId ->
+                    navController.navigate(chatRoute(sessionId)) {
+                        popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                        launchSingleTop = true
+                    }
+                })
+            }
+            composable("me") { MeScreen() }
         }
     }
 }
