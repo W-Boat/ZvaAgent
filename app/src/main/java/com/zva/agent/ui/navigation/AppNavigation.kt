@@ -22,16 +22,12 @@ import com.zva.agent.ui.screen.chat.ChatScreen
 import com.zva.agent.ui.screen.history.HistoryScreen
 import com.zva.agent.ui.screen.me.MeScreen
 
-sealed class Screen(val route: String, val label: String, val icon: ImageVector) {
-    data object Chat : Screen("chat?sessionId={sessionId}", "Chat", Icons.Default.Chat)
-    data object History : Screen("history", "History", Icons.Default.History)
-    data object Me : Screen("me", "Me", Icons.Default.Person)
-}
+data class Screen(val route: String, val label: String, val icon: ImageVector)
 
 val bottomScreens = listOf(
-    object : Screen("chat?sessionId={sessionId}", "Chat", Icons.Default.Chat) {},
-    object : Screen("history", "History", Icons.Default.History) {},
-    object : Screen("me", "Me", Icons.Default.Person) {},
+    Screen("chat?sessionId={sessionId}", "Chat", Icons.Default.Chat),
+    Screen("history", "History", Icons.Default.History),
+    Screen("me", "Me", Icons.Default.Person),
 )
 
 fun chatRoute(sessionId: String? = null): String =

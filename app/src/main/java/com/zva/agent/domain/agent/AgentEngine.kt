@@ -185,10 +185,11 @@ You are Dia — a precise, efficient task executor. You only do the work.
                         streamedContent.clear()
                         streamedContent.append(choice.message.content ?: "")
                         choice.message.toolCalls?.forEachIndexed { i, tc ->
-                            streamedToolCalls[i] = StreamedToolCall(
-                                id = tc.id, name = tc.function.name,
-                                arguments = StringBuilder(tc.function.arguments)
-                            )
+                            val stc = StreamedToolCall()
+                            stc.id = tc.id
+                            stc.name = tc.function.name
+                            stc.arguments.append(tc.function.arguments)
+                            streamedToolCalls[i] = stc
                         }
                         finishReason = choice.finishReason
                     }
